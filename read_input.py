@@ -3,6 +3,8 @@ import glob
 import os
 import numpy as np
 import rawpy
+from os import path
+import matplotlib.pyplot as plt
 
 # Short (input) and long (ground truth) exposure time photos directories
 input_dir = '/sata_disk/VRNN/Learning-to-See-in-the-Dark/dataset/Sony/short/'
@@ -14,7 +16,7 @@ train_ids = [int(os.path.basename(train_fp)[0:5]) for train_fp in train_fps]
 test_fps = glob.glob(input_dir + '*.ARW') # full paths
 test_ids = [int(os.path.basename(test_fp)[0:5]) for test_fp in test_fps]
 
-patch_size = 512 # cropped image size
+patch_size = 128 # cropped image size
 
 
 # pack Bayer image to 4 channels
@@ -63,7 +65,7 @@ def read_gt(filepath, half_size=False):
 # - randomly crops 512x512 piece
 # - random flip
 # - random transpose
-def augment_photo(input, gt):
+def augment_photos(input, gt):
     H = input.shape[1]
     W = input.shape[2]
 
@@ -139,4 +141,22 @@ class Generator:
         return np.concatenate(samples)
 
 
-
+def evaluate_photo(filepath, output_dir, model):
+    id = path.basename(filepath)[0:5]
+    gt_files = glob.glob(gt_dir + '{}_00*.ARW'.format(id))
+    gt_fp = gt_files[0]
+    sample_exp = float(path.basename(filepath)[9:-5])
+    gt_exp = float(path.basename(gt_fp)[9:-5])
+    ratio = min(gt_exp / sample_exp, 300)
+    sample_photo = read_input(filepath, ratio, 3)
+    gt_photo = read_gt(gt_fp, True)
+    sample_photo, gt_photo = augment_photos(sample_photo, gt_photo)
+    pred = model.predict(sample_photo)
+    fig = plt.figure()
+    ax1 = fig.add_subplot(2, 2, 1)
+    ax1.imshow(sample_photo[0, :, :, :])
+    ax2 = fig.add_subplot(2, 2, 2)
+    ax2.imshow(gt_photo[0, :, :, :])
+    ax3 = fig.add_subplot(2, 2, 3)
+    ax3.imshow(pred[0, :, :, :])
+    plt.show()

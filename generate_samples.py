@@ -3,7 +3,7 @@ import os
 import numpy as np
 import imageio
 from skimage import img_as_ubyte
-from read_input import gt_dir, test_fps, read_input, read_gt, augment_photo
+from read_input import gt_dir, test_fps, read_input, read_gt, augment_photos
 import matplotlib.pyplot as plt
 
 
@@ -37,7 +37,7 @@ def generate_samples(n=200, samples_dir='/sata_disk/VRNN/Learning-to-See-in-the-
         ratio = min(gt_exp / sample_exp, 300)
         sample_photo = read_input(sample_fp, ratio, channels)
         gt_photo = read_gt(gt_fp, half_size)
-        sample_photo, gt_photo = augment_photo(sample_photo, gt_photo)
+        sample_photo, gt_photo = augment_photos(sample_photo, gt_photo)
         sample_photo = sample_photo[0, :, :, :]
         gt_photo = gt_photo[0, :, :, :]
         curr_input_dir = os.path.join(input_dir, str(int(ratio)))

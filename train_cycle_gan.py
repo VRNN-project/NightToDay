@@ -6,7 +6,11 @@ from keras_contrib.layers.normalization.instancenormalization import InstanceNor
 from keras.utils.vis_utils import plot_model
 from random import randint, random
 from numpy import ones, zeros, asarray
-from read_input import train_ids, train_fps, test_fps, gt_dir, Generator
+from read_input import train_ids, train_fps, test_fps, gt_dir, Generator, evaluate_photo
+import time
+from os import makedirs, path
+import glob
+import matplotlib as plt
 
 
 def summarize_and_plot_model(model, plot_file):
@@ -163,7 +167,7 @@ def update_image_pool(pool, images, max_size=50):
             selected.append(image)
         else:
             # replace an existing image and use replaced image
-            ix = randint(0, len(pool))
+            ix = randint(0, len(pool) - 1)
             selected.append(pool[ix])
             pool[ix] = image
     return asarray(selected)
@@ -171,15 +175,13 @@ def update_image_pool(pool, images, max_size=50):
 
 # train cyclegan model
 def train(d_model_A, d_model_B, g_model_AtoB, g_model_BtoA, c_model_AtoB, c_model_BtoA,
-          n_train_samples, input_generator, gt_generator, n_epochs, n_batch):
+          n_train_samples, input_generator, gt_generator, n_epochs, n_batch, model_save_path):
     # determine the output square shape of the discriminator
     n_patch = d_model_A.output_shape[1]
     # prepare image pool for fakes
     poolA, poolB = list(), list()
     # calculate the number of batches per training epoch
     bat_per_epo = int(n_train_samples / n_batch)
-    # calculate the number of training iterations
-    n_steps = bat_per_epo * n_epochs
     # manually enumerate epochs
     for i in range(n_epochs):
         print("Starting epoch {}".format(i))
@@ -207,9 +209,15 @@ def train(d_model_A, d_model_B, g_model_AtoB, g_model_BtoA, c_model_AtoB, c_mode
             print('>%d, dA[%.3f,%.3f] dB[%.3f,%.3f] g[%.3f,%.3f]' % (
                 i + 1, dA_loss1, dA_loss2, dB_loss1, dB_loss2, g_loss1, g_loss2))
 
+        print("Saving models.")
+        g_model_AtoB.save(path.join(model_save_path, 'g_model_AtoB_{}'.format(i) + '.h5'))
+        g_model_BtoA.save(path.join(model_save_path, 'g_model_BtoA_{}'.format(i) + '.h5'))
+        d_model_A.save(path.join(model_save_path, 'd_model_A_{}'.format(i) + '.h5'))
+        d_model_B.save(path.join(model_save_path, 'd_model_B_{}'.format(i) + '.h5'))
+
 
 # input shape
-image_shape = (512, 512, 3)
+image_shape = (128, 128, 3)
 # generator: A -> B
 g_model_AtoB = define_generator(image_shape)
 # generator: B -> A
@@ -230,7 +238,17 @@ input_generator = Generator(test_fps, train_fps, gt_dir, False)
 gt_generator = Generator(train_fps, train_fps, gt_dir, True)
 
 n_epochs, n_batch = 100, 1
+timestamp = str(time.time())
+models_path = path.join('/sata_disk/VRNN/Learning-to-See-in-the-Dark/saved_models', timestamp)
+print("Models are being saved to {} before each epoch.".format(models_path))
+makedirs(models_path)
 
 # train models
 train(d_model_A, d_model_B, g_model_AtoB, g_model_BtoA, c_model_AtoB, c_model_BtoA,
-      len(train_ids), input_generator, gt_generator, n_epochs, n_batch)
+      len(train_ids), input_generator, gt_generator, n_epochs, n_batch,
+      models_path)
+
+
+# --- photo evaluation
+# evaluation_path = '/sata_disk/VRNN/Learning-to-See-in-the-Dark/evaluated_samples'
+# evaluate_photo('/sata_disk/VRNN/Learning-to-See-in-the-Dark/dataset/Sony/short/00001_00_0.1s.ARW', '', g_model_AtoB)
