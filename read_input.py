@@ -84,3 +84,59 @@ def augment_photo(input, gt):
 
     input_patch = np.minimum(input_patch, 1.0)
     return input_patch, gt_patch
+
+
+# same method, but for a photo without a pair
+def augment_photo(input):
+    H = input.shape[1]
+    W = input.shape[2]
+
+    xx = np.random.randint(0, W - patch_size)
+    yy = np.random.randint(0, H - patch_size)
+    input_patch = input[:, yy:yy + patch_size, xx:xx + patch_size, :]
+
+    if np.random.randint(2, size=1)[0] == 1:  # random flip
+        input_patch = np.flip(input_patch, axis=1)
+    if np.random.randint(2, size=1)[0] == 1:
+        input_patch = np.flip(input_patch, axis=2)
+    if np.random.randint(2, size=1)[0] == 1:  # random transpose
+        input_patch = np.transpose(input_patch, (0, 2, 1, 3))
+
+    input_patch = np.minimum(input_patch, 1.0)
+    return input_patch
+
+
+# Generates samples. Used by generate_real_samples function in train_cycle_gan.
+# If exposed set to True, these are ground truth (exposed) photos
+class Generator:
+
+    def __init__(self, fullpaths, gt_paths, gt_dir, exposed):
+        self.fullpaths = fullpaths
+        self.gt_paths = gt_paths
+        self.exposed = exposed
+        self.gt_dir = gt_dir
+
+    def get_samples(self, n_samples):
+        samples = []
+        if not self.exposed:
+            for _ in range(n_samples):
+                sample_fp = np.random.choice(self.fullpaths)
+                id = os.path.basename(sample_fp)[0:5]
+                gt_files = glob.glob(gt_dir + '{}_00*.ARW'.format(id))
+                gt_fp = gt_files[0]
+                sample_exp = float(os.path.basename(sample_fp)[9:-5])
+                gt_exp = float(os.path.basename(gt_fp)[9:-5])
+                ratio = int(min(gt_exp / sample_exp, 300))
+                sample_photo = read_input(sample_fp, ratio, 3)
+                sample_photo = augment_photo(sample_photo)
+                samples.append(sample_photo)
+        else:
+            for _ in range(n_samples):
+                sample_fp = np.random.choice(self.gt_paths)
+                sample_photo = read_gt(sample_fp, True)
+                sample_photo = augment_photo(sample_photo)
+                samples.append(sample_photo)
+        return np.concatenate(samples)
+
+
+

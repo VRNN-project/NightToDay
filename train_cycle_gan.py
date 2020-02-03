@@ -1,14 +1,15 @@
 from keras.optimizers import Adam
 from keras.initializers import RandomNormal
 from keras.models import Model, Input
-from keras.layers import Conv2D, LeakyReLU, Activation, Concatenate, BatchNormalization, Conv2DTranspose
+from keras.layers import Conv2D, LeakyReLU, Activation, Concatenate, Conv2DTranspose
 from keras_contrib.layers.normalization.instancenormalization import InstanceNormalization
 from keras.utils.vis_utils import plot_model
-from random import randint
-from numpy import ones
+from random import randint, random
+from numpy import ones, zeros, asarray
+from read_input import train_ids, train_fps, test_fps, gt_dir, Generator
 
 
-def summarize_and_plot_model(model, plot_file='discriminator_model_plot.png'):
+def summarize_and_plot_model(model, plot_file):
     # summarize the model
     model.summary()
     # plot the model
@@ -133,29 +134,82 @@ def define_composite_model(g_model_1, d_model, g_model_2, image_shape):
 
 
 # select a batch of random samples, returns images and target
-def generate_real_samples(dataset, n_samples, patch_shape):
-    # choose random instances
-    ix = randint(0, dataset.shape[0], n_samples)
-    # retrieve selected images
-    X = dataset[ix]
+def generate_real_samples(generator, n_samples, patch_shape):
+    X = generator.get_samples(n_samples)
     # generate 'real' class labels (1)
     y = ones((n_samples, patch_shape, patch_shape, 1))
     return X, y
 
 
-# select a batch of random samples, returns images and target
-def generate_real_samples(dataset, n_samples, patch_shape):
-    # choose random instances
-    ix = randint(0, dataset.shape[0], n_samples)
-    # retrieve selected images
-    X = dataset[ix]
-    # generate 'real' class labels (1)
-    y = ones((n_samples, patch_shape, patch_shape, 1))
+# generate a batch of images, returns images and targets
+def generate_fake_samples(g_model, dataset, patch_shape):
+    # generate fake instance
+    X = g_model.predict(dataset)
+    # create 'fake' class labels (0)
+    y = zeros((len(X), patch_shape, patch_shape, 1))
     return X, y
+
+
+# update image pool for fake images
+def update_image_pool(pool, images, max_size=50):
+    selected = list()
+    for image in images:
+        if len(pool) < max_size:
+            # stock the pool
+            pool.append(image)
+            selected.append(image)
+        elif random() < 0.5:
+            # use image, but don't add it to the pool
+            selected.append(image)
+        else:
+            # replace an existing image and use replaced image
+            ix = randint(0, len(pool))
+            selected.append(pool[ix])
+            pool[ix] = image
+    return asarray(selected)
+
+
+# train cyclegan model
+def train(d_model_A, d_model_B, g_model_AtoB, g_model_BtoA, c_model_AtoB, c_model_BtoA,
+          n_train_samples, input_generator, gt_generator, n_epochs, n_batch):
+    # determine the output square shape of the discriminator
+    n_patch = d_model_A.output_shape[1]
+    # prepare image pool for fakes
+    poolA, poolB = list(), list()
+    # calculate the number of batches per training epoch
+    bat_per_epo = int(n_train_samples / n_batch)
+    # calculate the number of training iterations
+    n_steps = bat_per_epo * n_epochs
+    # manually enumerate epochs
+    for i in range(n_epochs):
+        print("Starting epoch {}".format(i))
+        for i in range(bat_per_epo):
+            # select a batch of real samples
+            X_realA, y_realA = generate_real_samples(input_generator, n_batch, n_patch)
+            X_realB, y_realB = generate_real_samples(gt_generator, n_batch, n_patch)
+            # generate a batch of fake samples
+            X_fakeA, y_fakeA = generate_fake_samples(g_model_BtoA, X_realB, n_patch)
+            X_fakeB, y_fakeB = generate_fake_samples(g_model_AtoB, X_realA, n_patch)
+            # update fakes from pool
+            X_fakeA = update_image_pool(poolA, X_fakeA)
+            X_fakeB = update_image_pool(poolB, X_fakeB)
+            # update generator B->A via adversarial and cycle loss
+            g_loss2, _, _, _, _ = c_model_BtoA.train_on_batch([X_realB, X_realA], [y_realA, X_realA, X_realB, X_realA])
+            # update discriminator for A -> [real/fake]
+            dA_loss1 = d_model_A.train_on_batch(X_realA, y_realA)
+            dA_loss2 = d_model_A.train_on_batch(X_fakeA, y_fakeA)
+            # update generator A->B via adversarial and cycle loss
+            g_loss1, _, _, _, _ = c_model_AtoB.train_on_batch([X_realA, X_realB], [y_realB, X_realB, X_realA, X_realB])
+            # update discriminator for B -> [real/fake]
+            dB_loss1 = d_model_B.train_on_batch(X_realB, y_realB)
+            dB_loss2 = d_model_B.train_on_batch(X_fakeB, y_fakeB)
+            # summarize performance
+            print('>%d, dA[%.3f,%.3f] dB[%.3f,%.3f] g[%.3f,%.3f]' % (
+                i + 1, dA_loss1, dA_loss2, dB_loss1, dB_loss2, g_loss1, g_loss2))
 
 
 # input shape
-image_shape = (512, 512, 4)
+image_shape = (512, 512, 3)
 # generator: A -> B
 g_model_AtoB = define_generator(image_shape)
 # generator: B -> A
@@ -165,16 +219,18 @@ d_model_A = define_discriminator(image_shape)
 # discriminator: B -> [real/fake]
 d_model_B = define_discriminator(image_shape)
 
+# composite: A -> B -> [real/fake, A]
+c_model_AtoB = define_composite_model(g_model_AtoB, d_model_B, g_model_BtoA, image_shape)
+# composite: B -> A -> [real/fake, B]
+c_model_BtoA = define_composite_model(g_model_BtoA, d_model_A, g_model_AtoB, image_shape)
 
-# # composite: A -> B -> [real/fake, A]
-# c_model_AtoBtoA = define_composite_model(g_model_AtoB, d_model_B, g_model_BtoA, image_shape)
-# # composite: B -> A -> [real/fake, B]
-# c_model_BtoAtoB = define_composite_model(g_model_BtoA, d_model_A, g_model_AtoB, image_shape)
 
-summarize_and_plot_model(g_model_AtoB, plot_file='generator_AToB.png')
-summarize_and_plot_model(g_model_BtoA, plot_file='generator_BToA.png')
-summarize_and_plot_model(d_model_A, plot_file='d_model_A.png')
-summarize_and_plot_model(d_model_B, plot_file='d_model_B.png')
-# select a batch of real samples
-# X_realA, y_realA = generate_real_samples(trainA, n_batch, n_patch)
-# X_realB, y_realB = generate_real_samples(trainB, n_batch, n_patch)
+# dataset generators
+input_generator = Generator(test_fps, train_fps, gt_dir, False)
+gt_generator = Generator(train_fps, train_fps, gt_dir, True)
+
+n_epochs, n_batch = 100, 1
+
+# train models
+train(d_model_A, d_model_B, g_model_AtoB, g_model_BtoA, c_model_AtoB, c_model_BtoA,
+      len(train_ids), input_generator, gt_generator, n_epochs, n_batch)
