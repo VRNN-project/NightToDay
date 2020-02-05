@@ -1,0 +1,8 @@
+Żeby wygenerować sobie paczkę należy:
+- w read_input.py ustawić patch_size na taki jaki się chce (czyli np. 512, wtedy wygeneruje obrazki 512x512)
+- w read_input.py ustawić ścieżki do wejściowych (short) i ground truth (long) obrazków.
+- w generate_samples.py wywołać funkcję generate_samples(n, path, channels, half_size), gdzie:
+  * n - liczba wygenerowanych obrazków
+  * path - docelowa ścieżka, gdzie mają być wygenerowane obrazki
+  * channels - ile kanałów mają mieć obrazki wejściowe (3 lub 4)
+  * half_size - jeśli True, to obrazki ground truth będą miały te same wymiary, co wejściowe.
