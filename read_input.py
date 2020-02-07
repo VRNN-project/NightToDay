@@ -7,8 +7,8 @@ from os import path
 import matplotlib.pyplot as plt
 
 # Short (input) and long (ground truth) exposure time photos directories
-input_dir = '/home/franco/datasets/vrnn/Sony/short/'
-gt_dir = '/home/franco/datasets/vrnn/Sony/long/'
+input_dir = '/home/franco/datasets/visualn/Sony/short/'
+gt_dir = '/home/franco/datasets/visualn/Sony/long/'
 
 train_fps = glob.glob(gt_dir + '*.ARW') # full paths
 train_ids = [int(os.path.basename(train_fp)[0:5]) for train_fp in train_fps]

@@ -1,4 +1,3 @@
-import tensorflow_addons as tfa
 import tensorflow as tf
 from tensorflow.keras.optimizers import Adam
 from tensorflow.keras.initializers import RandomNormal
@@ -17,7 +16,6 @@ import matplotlib as plt
 from datetime import datetime
 
 
-logdir = "~/logs/discriminator/" + datetime.now().strftime("%Y%m%d-%H%M%S")
 
 
 
@@ -183,11 +181,11 @@ def update_image_pool(pool, images, max_size=50):
 
 # train cyclegan model
 def train(d_model_A, d_model_B, g_model_AtoB, g_model_BtoA, c_model_AtoB, c_model_BtoA,
-          n_train_samples, input_generator, gt_generator, n_epochs, n_batch, model_save_path):
+          n_train_samples, input_generator, gt_generator, starting_epoch, n_epochs, n_batch, model_save_path):
 
     current_time = datetime.now().strftime("%Y%m%d-%H%M%S")
 
-    train_log_dir = '~/logs/' + current_time + '/train'
+    train_log_dir = 'logs/' + current_time + '/train'
     train_summary_writer = tf.summary.create_file_writer(train_log_dir)
 
     # determine the output square shape of the discriminator
@@ -197,7 +195,7 @@ def train(d_model_A, d_model_B, g_model_AtoB, g_model_BtoA, c_model_AtoB, c_mode
     # calculate the number of batches per training epoch
     bat_per_epo = int(n_train_samples / n_batch)
     # manually enumerate epochs
-    for epoch in range(n_epochs):
+    for epoch in range(starting_epoch, n_epochs):
         print("Starting epoch {}".format(epoch))
         for bat in range(bat_per_epo):
             # select a batch of real samples
@@ -232,10 +230,10 @@ def train(d_model_A, d_model_B, g_model_AtoB, g_model_BtoA, c_model_AtoB, c_mode
                 tf.summary.scalar('g_loss2', g_loss2, step=epoch*bat_per_epo + bat)
 
         print("Saving models.")
-        g_model_AtoB.save(path.join(model_save_path, 'g_model_AtoB_{}'.format(i) + '.h5'))
-        g_model_BtoA.save(path.join(model_save_path, 'g_model_BtoA_{}'.format(i) + '.h5'))
-        d_model_A.save(path.join(model_save_path, 'd_model_A_{}'.format(i) + '.h5'))
-        d_model_B.save(path.join(model_save_path, 'd_model_B_{}'.format(i) + '.h5'))
+        g_model_AtoB.save(path.join(model_save_path, 'g_model_AtoB_{}'.format(epoch) + '.h5'))
+        g_model_BtoA.save(path.join(model_save_path, 'g_model_BtoA_{}'.format(epoch) + '.h5'))
+        d_model_A.save(path.join(model_save_path, 'd_model_A_{}'.format(epoch) + '.h5'))
+        d_model_B.save(path.join(model_save_path, 'd_model_B_{}'.format(epoch) + '.h5'))
 
 
 # input shape
@@ -249,10 +247,31 @@ d_model_A = define_discriminator(image_shape)
 # discriminator: B -> [real/fake]
 d_model_B = define_discriminator(image_shape)
 
+# loading models
+def load_models(start_epoch, load_models_path):
+    global g_model_AtoB, g_model_BtoA, d_model_A, d_model_B
+
+    epoch = start_epoch
+    model_save_path = load_models_path
+    print("Loading models from epoch", epoch)
+
+    g_model_AtoB = tf.keras.models.load_model(path.join(model_save_path, 'g_model_AtoB_{}'.format(epoch) + '.h5'))
+    g_model_BtoA = tf.keras.models.load_model(path.join(model_save_path, 'g_model_BtoA_{}'.format(epoch) + '.h5'))
+    d_model_A = tf.keras.models.load_model(path.join(model_save_path, 'd_model_A_{}'.format(epoch) + '.h5'))
+    d_model_B = tf.keras.models.load_model(path.join(model_save_path, 'd_model_B_{}'.format(epoch) + '.h5'))
+
+
+
+load_models_path = "/home/franco/repos/NightToDay/models/repos/NightToDay/saved_models/1581085141.202446/"
+start_epoch = 13
+load_models(start_epoch, load_models_path)
+
 # composite: A -> B -> [real/fake, A]
 c_model_AtoB = define_composite_model(g_model_AtoB, d_model_B, g_model_BtoA, image_shape)
 # composite: B -> A -> [real/fake, B]
 c_model_BtoA = define_composite_model(g_model_BtoA, d_model_A, g_model_AtoB, image_shape)
+
+
 
 
 # dataset generators
@@ -261,16 +280,16 @@ gt_generator = Generator(train_fps, train_fps, gt_dir, True)
 
 n_epochs, n_batch = 100, 1
 timestamp = str(time.time())
-models_path = path.join('~/repos/NightToDay/saved_models', timestamp)
+models_path = path.join('models/repos/NightToDay/saved_models', timestamp)
 print("Models are being saved to {} before each epoch.".format(models_path))
 makedirs(models_path)
 
 # train models
 train(d_model_A, d_model_B, g_model_AtoB, g_model_BtoA, c_model_AtoB, c_model_BtoA,
-      len(train_ids), input_generator, gt_generator, n_epochs, n_batch,
+      len(train_ids), input_generator, gt_generator, start_epoch, n_epochs, n_batch,
       models_path)
 
 
 # --- photo evaluation
 # evaluation_path = '/sata_disk/VRNN/Learning-to-See-in-the-Dark/evaluated_samples'
-evaluate_photo('~/datasets/vrnn/Sony/short/00001_00_0.1s.ARW', '', g_model_AtoB)
+evaluate_photo('/disk-old/Sony/short/00001_00_0.1s.ARW', '', g_model_AtoB)
