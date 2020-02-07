@@ -7,14 +7,18 @@ from os import path
 import matplotlib.pyplot as plt
 
 # Short (input) and long (ground truth) exposure time photos directories
-input_dir = '/sata_disk/VRNN/Learning-to-See-in-the-Dark/dataset/Sony/short/'
-gt_dir = '/sata_disk/VRNN/Learning-to-See-in-the-Dark/dataset/Sony/long/'
+input_dir = '/home/franco/datasets/vrnn/Sony/short/'
+gt_dir = '/home/franco/datasets/vrnn/Sony/long/'
 
 train_fps = glob.glob(gt_dir + '*.ARW') # full paths
 train_ids = [int(os.path.basename(train_fp)[0:5]) for train_fp in train_fps]
 
 test_fps = glob.glob(input_dir + '*.ARW') # full paths
 test_ids = [int(os.path.basename(test_fp)[0:5]) for test_fp in test_fps]
+
+# print("train fps", train_fps)
+# print(gt_dir)
+# print("There are", len(test_ids), "test-ids and", len(train_ids), "train_ids\n\n\n\n")
 
 patch_size = 128 # cropped image size
 
