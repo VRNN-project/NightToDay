@@ -220,7 +220,7 @@ def train(d_model_A, d_model_B, g_model_AtoB, g_model_BtoA, c_model_AtoB, c_mode
             dB_loss1 = d_model_B.train_on_batch(X_realB, y_realB)
             dB_loss2 = d_model_B.train_on_batch(X_fakeB, y_fakeB)
             # summarize performance
-            print('E %d B %d >%d, dA[%.3f,%.3f] dB[%.3f,%.3f] g[%.3f,%.3f]' % (
+            print('E %d B %d > dA[%.3f,%.3f] dB[%.3f,%.3f] g[%.3f,%.3f]' % (
                 epoch + 1, bat + 1, dA_loss1, dA_loss2, dB_loss1, dB_loss2, g_loss1, g_loss2))
 
             with train_summary_writer.as_default():
