@@ -1,9 +1,11 @@
-from keras.optimizers import Adam
-from keras.initializers import RandomNormal
-from keras.models import Model, Input
-from keras.layers import Conv2D, LeakyReLU, Activation, Concatenate, Conv2DTranspose
-from keras_contrib.layers.normalization.instancenormalization import InstanceNormalization
-from keras.utils.vis_utils import plot_model
+import tensorflow as tf
+from tensorflow.keras.optimizers import Adam
+from tensorflow.keras.initializers import RandomNormal
+from tensorflow.keras.models import Model
+from tensorflow.keras.layers import Conv2D, LeakyReLU, Activation, Concatenate, Conv2DTranspose, Input
+from tensorflow_addons.layers import InstanceNormalization
+from tensorflow.keras.utils import plot_model
+from tensorflow.keras.callbacks import TensorBoard
 from random import randint, random
 from numpy import ones, zeros, asarray
 from read_input import train_ids, train_fps, test_fps, gt_dir, Generator, evaluate_photo
@@ -11,6 +13,10 @@ import time
 from os import makedirs, path
 import glob
 import matplotlib as plt
+from datetime import datetime
+
+
+
 
 
 def summarize_and_plot_model(model, plot_file):
@@ -175,7 +181,13 @@ def update_image_pool(pool, images, max_size=50):
 
 # train cyclegan model
 def train(d_model_A, d_model_B, g_model_AtoB, g_model_BtoA, c_model_AtoB, c_model_BtoA,
-          n_train_samples, input_generator, gt_generator, n_epochs, n_batch, model_save_path):
+          n_train_samples, input_generator, gt_generator, starting_epoch, n_epochs, n_batch, model_save_path):
+
+    current_time = datetime.now().strftime("%Y%m%d-%H%M%S")
+
+    train_log_dir = 'logs/' + current_time + '/train'
+    train_summary_writer = tf.summary.create_file_writer(train_log_dir)
+
     # determine the output square shape of the discriminator
     n_patch = d_model_A.output_shape[1]
     # prepare image pool for fakes
@@ -183,9 +195,9 @@ def train(d_model_A, d_model_B, g_model_AtoB, g_model_BtoA, c_model_AtoB, c_mode
     # calculate the number of batches per training epoch
     bat_per_epo = int(n_train_samples / n_batch)
     # manually enumerate epochs
-    for i in range(n_epochs):
-        print("Starting epoch {}".format(i))
-        for i in range(bat_per_epo):
+    for epoch in range(starting_epoch, n_epochs):
+        print("Starting epoch {}".format(epoch))
+        for bat in range(bat_per_epo):
             # select a batch of real samples
             X_realA, y_realA = generate_real_samples(input_generator, n_batch, n_patch)
             X_realB, y_realB = generate_real_samples(gt_generator, n_batch, n_patch)
@@ -206,14 +218,22 @@ def train(d_model_A, d_model_B, g_model_AtoB, g_model_BtoA, c_model_AtoB, c_mode
             dB_loss1 = d_model_B.train_on_batch(X_realB, y_realB)
             dB_loss2 = d_model_B.train_on_batch(X_fakeB, y_fakeB)
             # summarize performance
-            print('>%d, dA[%.3f,%.3f] dB[%.3f,%.3f] g[%.3f,%.3f]' % (
-                i + 1, dA_loss1, dA_loss2, dB_loss1, dB_loss2, g_loss1, g_loss2))
+            print('E %d B %d > dA[%.3f,%.3f] dB[%.3f,%.3f] g[%.3f,%.3f]' % (
+                epoch + 1, bat + 1, dA_loss1, dA_loss2, dB_loss1, dB_loss2, g_loss1, g_loss2))
+
+            with train_summary_writer.as_default():
+                tf.summary.scalar('dA_loss1', dA_loss1, step=epoch*bat_per_epo + bat)
+                tf.summary.scalar('dA_loss2', dA_loss2, step=epoch*bat_per_epo + bat)
+                tf.summary.scalar('dB_loss1', dB_loss1, step=epoch*bat_per_epo + bat)
+                tf.summary.scalar('dB_loss2', dB_loss2, step=epoch*bat_per_epo + bat)
+                tf.summary.scalar('g_loss1', g_loss1, step=epoch*bat_per_epo + bat)
+                tf.summary.scalar('g_loss2', g_loss2, step=epoch*bat_per_epo + bat)
 
         print("Saving models.")
-        g_model_AtoB.save(path.join(model_save_path, 'g_model_AtoB_{}'.format(i) + '.h5'))
-        g_model_BtoA.save(path.join(model_save_path, 'g_model_BtoA_{}'.format(i) + '.h5'))
-        d_model_A.save(path.join(model_save_path, 'd_model_A_{}'.format(i) + '.h5'))
-        d_model_B.save(path.join(model_save_path, 'd_model_B_{}'.format(i) + '.h5'))
+        g_model_AtoB.save(path.join(model_save_path, 'g_model_AtoB_{}'.format(epoch) + '.h5'))
+        g_model_BtoA.save(path.join(model_save_path, 'g_model_BtoA_{}'.format(epoch) + '.h5'))
+        d_model_A.save(path.join(model_save_path, 'd_model_A_{}'.format(epoch) + '.h5'))
+        d_model_B.save(path.join(model_save_path, 'd_model_B_{}'.format(epoch) + '.h5'))
 
 
 # input shape
@@ -227,10 +247,35 @@ d_model_A = define_discriminator(image_shape)
 # discriminator: B -> [real/fake]
 d_model_B = define_discriminator(image_shape)
 
+# loading models
+def load_models(start_epoch, load_models_path):
+    global g_model_AtoB, g_model_BtoA, d_model_A, d_model_B
+
+    epoch = start_epoch
+    model_save_path = load_models_path
+    print("Loading models from epoch", epoch)
+
+    g_model_AtoB = tf.keras.models.load_model(path.join(model_save_path, 'g_model_AtoB_{}'.format(epoch) + '.h5'), compile=False)
+    g_model_AtoB.compile(loss='mse', optimizer=Adam(lr=0.0002, beta_1=0.5), loss_weights=[0.5])
+
+    g_model_BtoA = tf.keras.models.load_model(path.join(model_save_path, 'g_model_BtoA_{}'.format(epoch) + '.h5'), compile=False)
+    g_model_BtoA.compile(loss='mse', optimizer=Adam(lr=0.0002, beta_1=0.5), loss_weights=[0.5])
+
+    d_model_A = tf.keras.models.load_model(path.join(model_save_path, 'd_model_A_{}'.format(epoch) + '.h5'))
+    d_model_B = tf.keras.models.load_model(path.join(model_save_path, 'd_model_B_{}'.format(epoch) + '.h5'))
+
+
+
+load_models_path = "/home/franco/repos/NightToDay/models/repos/NightToDay/saved_models/1581085141.202446/"
+start_epoch = 13
+load_models(start_epoch, load_models_path)
+
 # composite: A -> B -> [real/fake, A]
 c_model_AtoB = define_composite_model(g_model_AtoB, d_model_B, g_model_BtoA, image_shape)
 # composite: B -> A -> [real/fake, B]
 c_model_BtoA = define_composite_model(g_model_BtoA, d_model_A, g_model_AtoB, image_shape)
+
+
 
 
 # dataset generators
@@ -239,16 +284,16 @@ gt_generator = Generator(train_fps, train_fps, gt_dir, True)
 
 n_epochs, n_batch = 100, 1
 timestamp = str(time.time())
-models_path = path.join('/sata_disk/VRNN/Learning-to-See-in-the-Dark/saved_models', timestamp)
+models_path = path.join('models/repos/NightToDay/saved_models', timestamp)
 print("Models are being saved to {} before each epoch.".format(models_path))
 makedirs(models_path)
 
 # train models
 train(d_model_A, d_model_B, g_model_AtoB, g_model_BtoA, c_model_AtoB, c_model_BtoA,
-      len(train_ids), input_generator, gt_generator, n_epochs, n_batch,
+      len(train_ids), input_generator, gt_generator, start_epoch, n_epochs, n_batch,
       models_path)
 
 
 # --- photo evaluation
 # evaluation_path = '/sata_disk/VRNN/Learning-to-See-in-the-Dark/evaluated_samples'
-# evaluate_photo('/sata_disk/VRNN/Learning-to-See-in-the-Dark/dataset/Sony/short/00001_00_0.1s.ARW', '', g_model_AtoB)
+evaluate_photo('/disk-old/Sony/short/00001_00_0.1s.ARW', '', g_model_AtoB)

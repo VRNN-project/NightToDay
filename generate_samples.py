@@ -10,7 +10,7 @@ import matplotlib.pyplot as plt
 # generate samples the dataset
 # channels - number of channels to pack short exposure photos into
 # If half_size set to True, resulting ground truth photo resolution will be X x Y, not 2X x 2Y (comparing to input)
-def generate_samples(n=200, samples_dir='/sata_disk/VRNN/Learning-to-See-in-the-Dark/samples/',
+def generate_samples(n=200, samples_dir='~/datasets/vrnn/samples/',
                      channels=4, half_size=True):
     input_dir = os.path.join(samples_dir, 'short')
     sample_gt_dir = os.path.join(samples_dir, 'long')
@@ -58,4 +58,4 @@ def show_img(input, gt):
     plt.show()
 
 
-generate_samples(30, '/sata_disk/VRNN/Learning-to-See-in-the-Dark/samples6/', 3)
+generate_samples(30, '-in-the-Dark/samples6/', 3)
