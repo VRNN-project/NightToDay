@@ -255,10 +255,10 @@ def load_models(start_epoch, load_models_path):
     model_save_path = load_models_path
     print("Loading models from epoch", epoch)
 
-    g_model_AtoB = tf.keras.models.load_model(path.join(model_save_path, 'g_model_AtoB_{}'.format(epoch) + '.h5'))
+    g_model_AtoB = tf.keras.models.load_model(path.join(model_save_path, 'g_model_AtoB_{}'.format(epoch) + '.h5'), compile=False)
     g_model_AtoB.compile(loss='mse', optimizer=Adam(lr=0.0002, beta_1=0.5), loss_weights=[0.5])
 
-    g_model_BtoA = tf.keras.models.load_model(path.join(model_save_path, 'g_model_BtoA_{}'.format(epoch) + '.h5'))
+    g_model_BtoA = tf.keras.models.load_model(path.join(model_save_path, 'g_model_BtoA_{}'.format(epoch) + '.h5'), compile=False)
     g_model_BtoA.compile(loss='mse', optimizer=Adam(lr=0.0002, beta_1=0.5), loss_weights=[0.5])
 
     d_model_A = tf.keras.models.load_model(path.join(model_save_path, 'd_model_A_{}'.format(epoch) + '.h5'))
