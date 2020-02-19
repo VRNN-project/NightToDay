@@ -5,6 +5,8 @@ import numpy as np
 import rawpy
 from os import path
 import matplotlib.pyplot as plt
+from tensorflow import image
+
 
 # Short (input) and long (ground truth) exposure time photos directories
 sony_dataset = {
@@ -223,4 +225,46 @@ def evaluate_photo(filepath, output_dir, model, dataset):
     plt.show()
     print("Image shown")
 
+
 print('dataset_size', sum([len(ids) for ids in train_ids_per_dataset]))
+
+
+# Calculates mean psnr (https://en.wikipedia.org/wiki/Peak_signal-to-noise_ratio) in a dataset
+def mean_psnr(gt_photos, outputs):
+    return np.mean(image.psnr(gt_photos, outputs, 1))
+
+
+# Calculates mean ssim (https://en.wikipedia.org/wiki/Structural_similarity) in a dataset
+def mean_ssim(gt_photos, outputs):
+    return np.mean(image.ssim(gt_photos, outputs, 1))
+
+
+# Calculates two measures above (psnr, ssim) for a given lists of paired photos (ground_truth, output)
+def calculate_measures(dataset):
+    outputs, ground_truths = ([ i for i, _ in dataset ], [ j for _, j in dataset ] )
+    return mean_psnr(ground_truths, outputs), mean_ssim(ground_truths, outputs)
+
+
+# Loads photo with its ground_truth
+def load_image_with_gt(filepath, model, dataset):
+    id = path.basename(filepath)[0:5]
+    gt_files = glob.glob(dataset['gt_dir'] + '{}_00*.{}'.format(id, dataset['extension']))
+    gt_fp = gt_files[0]
+    sample_exp = float(path.basename(filepath)[9:-5])
+    gt_exp = float(path.basename(gt_fp)[9:-5])
+    ratio = min(gt_exp / sample_exp, 300)
+    sample_photo = read_input(filepath, ratio, 4)
+    gt_photo = read_gt(gt_fp, True)
+    return augment_photos(sample_photo, gt_photo)
+
+
+# Evaluates test dataset given paths to test files
+def evaluate_model(model, test_data, filepaths):
+    loaded_photos = [load_image_with_gt(filepath, model, test_data) for filepath in filepaths]
+    measures = calculate_measures(loaded_photos)
+    print("PSNR: {}, SSIM: {}")
+    return measures
+
+
+# Tu sobie mozemy odkomentowac i policzyc
+# evaluate_model(model, datasets[0], test_fps_per_dataset)
