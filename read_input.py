@@ -245,7 +245,7 @@ def calculate_measures(dataset):
     return mean_psnr(ground_truths, outputs), mean_ssim(ground_truths, outputs)
 
 
-# Loads photo with its ground_truth
+# Loads output photo with its ground_truth
 def load_image_with_gt(filepath, model, dataset):
     id = path.basename(filepath)[0:5]
     gt_files = glob.glob(dataset['gt_dir'] + '{}_00*.{}'.format(id, dataset['extension']))
@@ -255,7 +255,10 @@ def load_image_with_gt(filepath, model, dataset):
     ratio = min(gt_exp / sample_exp, 300)
     sample_photo = read_input(filepath, ratio, 4)
     gt_photo = read_gt(gt_fp, True)
-    return augment_photos(sample_photo, gt_photo)
+    sample_photo, gt_photo = augment_photos(sample_photo, gt_photo)
+    pred = model.predict(sample_photo)
+    return pred, gt_photo
+
 
 
 # Evaluates test dataset given paths to test files
