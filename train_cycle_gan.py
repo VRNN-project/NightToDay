@@ -25,7 +25,7 @@ def summarize_and_plot_model(model, plot_file):
     # plot the model
     plot_model(model, to_file=plot_file, show_shapes=True, show_layer_names=True)
 
-lr = 0.0004 # 0.0002 domyślnie, chyba 03 było
+lr = 0.0004
 beta_1 = 0.5
 
 # Patch gan discriminator model
@@ -110,24 +110,11 @@ def define_generator(image_shape, n_resnet=9):
     g = Activation('relu')(g)
     # c7s1-3
     g = Conv2D(3, (7, 7), padding='same', kernel_initializer=init)(g)
-
-#    out_image = g
-#    out_image = Conv2D(3, (1, 1), padding='same', kernel_initializer=init)(g)
-
-
     g = InstanceNormalization(axis=-1)(g)
-
 
     out_image = Activation('tanh')(g)
     out_image = Lambda(lambda x: (x + 1) / 2)(out_image)
-    
 
-#    out_image = Activation('tanh')(g)
-#    out_image = Conv2D(3, (1, 1), padding='same', kernel_initializer=init)(g)
-#    out_image = Lambda(lambda x: min(max(1, x), 0))(out_image)
-
-#    out_image = g
-    # define model
     model = Model(in_image, out_image)
     return model
 
@@ -160,10 +147,6 @@ def define_composite_model(g_model_1, d_model, g_model_2, image_shape):
     # compile model with weighting of least squares loss and L1 loss
     model.compile(loss=['mse', 'mae', 'mae', 'mae'], loss_weights=[1, 5, 10, 10], optimizer=opt)
     return model
-
-# c_model_AtoB = define_composite_model(g_model_AtoB, d_model_B, g_model_BtoA, image_shape)
-# c_model_AtoB.train_on_batch([X_realA, X_realB], [y_realB, X_realB, X_realA, X_realB])
-
 
 # select a batch of random samples, returns images and target
 def generate_real_samples(generator, n_samples, patch_shape):
@@ -293,7 +276,6 @@ def load_models(start_epoch, load_models_path):
 #start_epoch = 47
 #load_models(start_epoch, load_models_path)
 
-
 if __name__ == "__main__":
     print(__name__)
     # input shape
@@ -308,8 +290,8 @@ if __name__ == "__main__":
     d_model_B = define_discriminator(image_shape)
 
     # dataset generators
-    start_epoch = 15
-    g_model_AtoB, g_model_BtoA, d_model_A, d_model_B = load_models(14, '/home/franco/models/2020-02-18-19:36:07')
+    start_epoch = 0
+#    g_model_AtoB, g_model_BtoA, d_model_A, d_model_B = load_models(57, '/home/franco/models/2020-02-18-19:36:07')
     # composite: A -> B -> [real/fake, A]
     c_model_AtoB = define_composite_model(g_model_AtoB, d_model_B, g_model_BtoA, image_shape)
     # composite: B -> A -> [real/fake, B]
@@ -318,18 +300,14 @@ if __name__ == "__main__":
     input_generator = Generator(test_fps_per_dataset, train_fps_per_dataset, datasets, False)
     gt_generator = Generator(test_fps_per_dataset, train_fps_per_dataset, datasets, True)
 
-    n_epochs, n_batch = 200, 1
+    n_epochs, n_batch = 100, 1
     timestamp = datetime.now().strftime("%Y-%m-%d-%H:%M:%S")
-    timestamp = "2020-02-18-19:36:07"
+
     models_path = path.join('/home/franco/models', timestamp)
     print("Models are being saved to {} after each epoch.".format(models_path))
-#    makedirs(models_path)
+    makedirs(models_path)
 
     # train models
     train(d_model_A, d_model_B, g_model_AtoB, g_model_BtoA, c_model_AtoB, c_model_BtoA,
          sum([len(ids) for ids in train_ids_per_dataset]), input_generator, gt_generator, start_epoch, n_epochs, n_batch,
          models_path)
-
-    # --- photo evaluation
-    # evaluation_path = '/sata_disk/VRNN/Learning-to-See-in-the-Dark/evaluated_samples'
-    evaluate_photo('/home/franco/datasets/vrnn/Sony/short/00001_00_0.1s.ARW', '', g_model_AtoB)

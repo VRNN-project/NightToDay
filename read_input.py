@@ -6,7 +6,7 @@ import rawpy
 from os import path
 import matplotlib.pyplot as plt
 from tensorflow import image
-
+from tensorflow import convert_to_tensor
 
 # Short (input) and long (ground truth) exposure time photos directories
 sony_dataset = {
@@ -45,8 +45,8 @@ train_fps_per_dataset = [glob.glob(dataset['gt_dir'] + '*.' + dataset['extension
 train_ids_per_dataset = [[int(os.path.basename(train_fp)[0:5]) for train_fp in train_fps] for train_fps in train_fps_per_dataset]
 
 # TODO
-test_fps_per_dataset = [glob.glob(dataset['input_dir'] + '*_0.1s.' + dataset['extension']) for dataset in datasets] # full paths
-#test_fps_per_dataset = [glob.glob(dataset['input_dir'] + '*.' + dataset['extension']) for dataset in datasets] # full paths
+#test_fps_per_dataset = [glob.glob(dataset['input_dir'] + '*_0.1s.' + dataset['extension']) for dataset in datasets] # full paths
+test_fps_per_dataset = [glob.glob(dataset['input_dir'] + '*.' + dataset['extension']) for dataset in datasets] # full paths
 test_ids_per_dataset = [[int(os.path.basename(test_fp)[0:5]) for test_fp in test_fps] for test_fps in test_fps_per_dataset]
 
 
@@ -106,8 +106,7 @@ import cv2
 # - random flip
 # - random transpose
 
-coeff = 16
-crop = patch_size * 4
+crop = patch_size * 11
 
 # same method, but for a photo without a pair
 def augment_photo(input):
@@ -116,50 +115,57 @@ def augment_photo(input):
 
     xx = np.random.randint(0, W - crop)
     yy = np.random.randint(0, H - crop)
+    xx = yy = 0
 
     input_patch = input[:, yy:yy + crop, xx:xx + crop, :]
     input_patch2 = []
 
     for i in range(len(input_patch)):
-        input_patch2.append(cv2.resize(input_patch[i], 
-                                    dsize=(patch_size, patch_size)))
+        input_patch2.append(cv2.resize(input_patch[i], dsize=(patch_size, patch_size)))
     input_patch = np.array(input_patch2)
 
-    if np.random.randint(2, size=1)[0] == 1:  # random flip
-        input_patch = np.flip(input_patch, axis=1)
-    if np.random.randint(2, size=1)[0] == 1:
-        input_patch = np.flip(input_patch, axis=2)
-    if np.random.randint(2, size=1)[0] == 1:  # random transpose
-        input_patch = np.transpose(input_patch, (0, 2, 1, 3))
+    if False:
+        if np.random.randint(2, size=1)[0] == 1:  # random flip
+            input_patch = np.flip(input_patch, axis=1)
+        if np.random.randint(2, size=1)[0] == 1:
+            input_patch = np.flip(input_patch, axis=2)
+        if np.random.randint(2, size=1)[0] == 1:  # random transpose
+            input_patch = np.transpose(input_patch, (0, 2, 1, 3))
 
     assert(np.max(input_patch) <= 1.000000001)
     input_patch = np.minimum(input_patch, 1.0)
     return input_patch
 
 def augment_photos(input, gt):
-    assert(False) # not to use
     H = input.shape[1]
     W = input.shape[2]
 
     xx = np.random.randint(0, W - crop)
     yy = np.random.randint(0, H - crop)
+    xx = yy = 0
 
     input_patch = input[:, yy:yy + crop, xx:xx + crop, :]
     gt_patch = gt[:, yy:yy + crop , xx:xx + crop, :]
 
+    input_patch2 = []
+    gt_patch2 = []
+    for i in range(len(input_patch)):
+        input_patch2.append(cv2.resize(input_patch[i], dsize=(patch_size, patch_size)))
+        gt_patch2.append(cv2.resize(gt_patch[i], dsize=(patch_size, patch_size)))
 
-    input_patch = cv2.resize(input_patch, dsize=(patch_size, patch_size), interpolation=cv2.INTER_CUBIC)
-    gt_patch = cv2.resize(gt_patch, dsize=(patch_size, patch_size), interpolation=cv2.INTER_CUBIC)
+    input_patch = np.array(input_patch2)
+    gt_patch = np.array(gt_patch2)
 
-    if np.random.randint(2, size=1)[0] == 1:  # random flip
-        input_patch = np.flip(input_patch, axis=1)
-        gt_patch = np.flip(gt_patch, axis=1)
-    if np.random.randint(2, size=1)[0] == 1:
-        input_patch = np.flip(input_patch, axis=2)
-        gt_patch = np.flip(gt_patch, axis=2)
-    if np.random.randint(2, size=1)[0] == 1:  # random transpose
-        input_patch = np.transpose(input_patch, (0, 2, 1, 3))
-        gt_patch = np.transpose(gt_patch, (0, 2, 1, 3))
+    if False:
+        if np.random.randint(2, size=1)[0] == 1:  # random flip
+            input_patch = np.flip(input_patch, axis=1)
+            gt_patch = np.flip(gt_patch, axis=1)
+        if np.random.randint(2, size=1)[0] == 1:
+            input_patch = np.flip(input_patch, axis=2)
+            gt_patch = np.flip(gt_patch, axis=2)
+        if np.random.randint(2, size=1)[0] == 1:  # random transpose
+            input_patch = np.transpose(input_patch, (0, 2, 1, 3))
+            gt_patch = np.transpose(gt_patch, (0, 2, 1, 3))
 
     input_patch = np.minimum(input_patch, 1.0)
     return input_patch, gt_patch
@@ -241,7 +247,8 @@ def mean_ssim(gt_photos, outputs):
 
 # Calculates two measures above (psnr, ssim) for a given lists of paired photos (ground_truth, output)
 def calculate_measures(dataset):
-    outputs, ground_truths = ([ i for i, _ in dataset ], [ j for _, j in dataset ] )
+#    print(dataset)
+    outputs, ground_truths = ((convert_to_tensor([ convert_to_tensor(i) for i, _ in dataset ]), convert_to_tensor([ convert_to_tensor(j) for _, j in dataset ])))
     return mean_psnr(ground_truths, outputs), mean_ssim(ground_truths, outputs)
 
 
@@ -250,20 +257,20 @@ def load_image_with_gt(filepath, model, dataset):
     id = path.basename(filepath)[0:5]
     gt_files = glob.glob(dataset['gt_dir'] + '{}_00*.{}'.format(id, dataset['extension']))
     gt_fp = gt_files[0]
-    sample_photo = read_gt(filepath, True)
+    input_photo = read_gt(filepath, True)
     gt_photo = read_gt(gt_fp, True)
-    sample_photo, gt_photo = augment_photos(sample_photo, gt_photo)
-    pred = model.predict(sample_photo)
-    return pred, gt_photo
+    input_photo, gt_photo = augment_photos(input_photo, gt_photo)
+    pred = model.predict(input_photo)
+    return input_photo, pred, gt_photo
 
 
 
 # Evaluates test dataset given paths to test files
 def evaluate_model(model, test_data, filepaths):
-    loaded_photos = [load_image_with_gt(filepath, model, test_data) for filepath in filepaths]
-    measures = calculate_measures(loaded_photos)
-    print("PSNR: {}, SSIM: {}")
-    return measures
+    loaded_photos = [load_image_with_gt(filepath, model, test_data)[1:3] for filepath in filepaths]
+    p, s = calculate_measures(loaded_photos)
+    print("PSNR: {}, SSIM: {}".format(p, s))
+    return p, s
 
 
 # Tu sobie mozemy odkomentowac i policzyc
